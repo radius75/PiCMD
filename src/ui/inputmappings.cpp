@@ -53,6 +53,14 @@ bool InputMappings::CheckButtonsBrowseMode()
 {
 	buttonFlags = 0;
 
+	// PiCMD does not need Pi1541's multi-image caddy in browse mode.
+	// Button 5 (Insert) is a full Raspberry Pi / PiCMD reboot instead.
+	if (IEC_Bus::GetInputButtonPressed(INPUT_BUTTON_INSERT))
+	{
+		Reboot_Pi();
+		return true;
+	}
+
 	if (IEC_Bus::GetInputButtonHeld(INPUT_BUTTON_INSERT))	// Change DeviceID
 	{
 		if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_ENTER))

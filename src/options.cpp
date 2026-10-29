@@ -186,11 +186,16 @@ Options::Options(void)
 	, CMDHDButtonWP(3)
 	, CMDHDButtonReset(4)
 	, CMDHDButtonExit(5)
+	, UTCOffsetMinutes(0)
+	, wifiSdioTest(0)
+	, wifiEnabled(0)
 {
 	autoMountImageName[0] = 0;
 	strcpy(ROMFontName, "chargen");
 	strcpy(LcdLogoName, "cmd");
 	ROMNameCMDHD[0] = 0;
+	NTPServer[0] = 0;
+	wifiSSID[0] = wifiPassword[0] = wifiCountry[0] = 0;
 	// GetLCDName is called whether or not options.txt sets LCDName, and it was
 	// left uninitialised - so with no LCDName line it returned a pointer into
 	// 256 bytes of stack leftovers with no terminator guaranteed.
@@ -220,7 +225,47 @@ void Options::Process(char* buffer)
 	while ((pOption = GetToken()) != 0)
 	{
 		/*char* equals = */GetToken();
-		char* pValue = GetToken();
+
+		char* pValue;
+		if ((strcasecmp(pOption, "WiFiSSID") == 0) ||
+			(strcasecmp(pOption, "WiFiPassword") == 0))
+		{
+			// SSIDs and WPA2 passphrases may contain spaces. Read the complete
+			// value up to the end of this line instead of using whitespace tokens.
+			// If the complete value is enclosed in quotes, strip only those outer
+			// quotes; quotes inside an unquoted value remain literal characters.
+			while ((*data == ' ') || (*data == '\t'))
+				data++;
+
+			pValue = data;
+			while ((*data != '\0') && (*data != '\r') && (*data != '\n'))
+				data++;
+
+			char* end = data;
+			while ((end > pValue) && ((end[-1] == ' ') || (end[-1] == '\t')))
+				end--;
+
+			if (*data != '\0')
+			{
+				char lineEnd = *data++;
+				if ((lineEnd == '\r') && (*data == '\n'))
+					data++;
+			}
+
+			*end = '\0';
+
+			unsigned valueLength = (unsigned)(end - pValue);
+			if ((valueLength >= 2) && (pValue[0] == '"') &&
+				(pValue[valueLength - 1] == '"'))
+			{
+				pValue++;
+				pValue[valueLength - 2] = '\0';
+			}
+		}
+		else
+		{
+			pValue = GetToken();
+		}
 
 		// GetToken returns 0 at the end of the buffer, so a key with no value
 		// - a truncated file, or a trailing "Font =" - leaves pValue null. The
@@ -290,6 +335,19 @@ void Options::Process(char* buffer)
 		{
 			CopyOption(ROMNameCMDHD, sizeof(ROMNameCMDHD), pValue);
 		}
+		else if (strcasecmp(pOption, "NTPServer") == 0)
+		{
+			CopyOption(NTPServer, sizeof(NTPServer), pValue);
+		}
+		else if (strcasecmp(pOption, "UTCOffsetMinutes") == 0)
+		{
+			UTCOffsetMinutes = (int)strtol(pValue, NULL, 0);
+		}
+		ELSE_CHECK_DECIMAL_OPTION(wifiSdioTest)
+		ELSE_CHECK_DECIMAL_OPTION(wifiEnabled)
+		else if (strcasecmp(pOption, "WiFiSSID") == 0) CopyOption(wifiSSID, sizeof(wifiSSID), pValue);
+		else if (strcasecmp(pOption, "WiFiPassword") == 0) CopyOption(wifiPassword, sizeof(wifiPassword), pValue);
+		else if (strcasecmp(pOption, "WiFiCountry") == 0) CopyOption(wifiCountry, sizeof(wifiCountry), pValue);
 		ELSE_CHECK_DECIMAL_OPTION(CMDHDDeviceID)
 		ELSE_CHECK_DECIMAL_OPTION(CMDHDCacheMB)
 		ELSE_CHECK_DECIMAL_OPTION(CMDHDAtnOutGPIO)
