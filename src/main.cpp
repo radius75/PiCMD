@@ -2015,7 +2015,7 @@ extern "C"
 							u8 wifiMac[6];
 							if (WifiDataLink_GetMac(wifiMac))
 							{
-								wifiNtpOk = NtpClient_FetchAndSetTimeOverFrames(piCMDHD, WifiDataLink_GetFrameIO(), wifiMac, options.GetNTPServer(), options.GetUTCOffsetMinutes(), 15000, &wifiNtpDateTime);
+								wifiNtpOk = NtpClient_FetchAndSetTimeOverFrames(piCMDHD, WifiDataLink_GetFrameIO(), wifiMac, options.GetNTPServer(), options.GetUTCOffsetMinutes(), options.GetDSTRule(), options.GetDSTOffset(), 15000, &wifiNtpDateTime);
 								if (wifiNtpOk)
 									rtcSynced = true;
 							}
@@ -2073,7 +2073,7 @@ extern "C"
 			screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 
 			NtpDateTime ntpDateTime = {};
-			bool ntpOk = NtpClient_FetchAndSetTime(piCMDHD, options.GetNTPServer(), options.GetUTCOffsetMinutes(), 5000, &ntpDateTime);
+			bool ntpOk = NtpClient_FetchAndSetTime(piCMDHD, options.GetNTPServer(), options.GetUTCOffsetMinutes(), options.GetDSTRule(), options.GetDSTOffset(), 5000, &ntpDateTime);
 			if (ntpOk)
 				rtcSynced = true;
 

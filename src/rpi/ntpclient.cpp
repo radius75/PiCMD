@@ -26,6 +26,7 @@
 #include "debug.h"
 #include <uspi.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include "sdpcm.h"
 
@@ -507,11 +508,71 @@ static void CivilFromDays(s64 z, int& y, int& m, int& d)
 	y = (int)(y0 + (m <= 2 ? 1 : 0));
 }
 
+// Calendar helpers for DST transitions; timestamps remain UTC until the final offset.
+static s64 DaysFromCivil(int y, unsigned m, unsigned d)
+{
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = (unsigned)(y - era * 400);
+    const unsigned mp = m > 2 ? m - 3 : m + 9;
+    const unsigned doy = (153 * mp + 2) / 5 + d - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (s64)era * 146097 + (s64)doe - 719468;
+}
+
+static int SundayOfMonth(int year, int month, int occurrence)
+{
+    // 1970-01-01 was Thursday, Sunday is 0.
+    int first = (int)((DaysFromCivil(year, month, 1) + 4) % 7);
+    if (first < 0) first += 7;
+    int firstSunday = 1 + (7 - first) % 7;
+    if (occurrence > 0) return firstSunday + (occurrence - 1) * 7;
+    int nextMonth = month == 12 ? 1 : month + 1;
+    int nextYear = year + (month == 12);
+    int lastDay = (int)(DaysFromCivil(nextYear, nextMonth, 1) - DaysFromCivil(year, month, 1));
+    return firstSunday + ((lastDay - firstSunday) / 7) * 7;
+}
+
+static s64 UtcTransition(int year, int month, int day, int hourLocal, int offsetMinutes)
+{
+    return DaysFromCivil(year, month, day) * 86400 + hourLocal * 3600 - (s64)offsetMinutes * 60;
+}
+
+static bool IsDST(s64 utcSeconds, const char* rule, s32 standardOffset, s32 dstOffset)
+{
+    if (!rule || !dstOffset) return false;
+    int year, month, day;
+    CivilFromDays(utcSeconds / 86400, year, month, day);
+    if (!strcasecmp(rule, "EU"))
+    {
+        // EU transitions at 01:00 UTC, irrespective of the standard offset.
+        s64 start = UtcTransition(year, 3, SundayOfMonth(year, 3, -1), 1, 0);
+        s64 end = UtcTransition(year, 10, SundayOfMonth(year, 10, -1), 1, 0);
+        return utcSeconds >= start && utcSeconds < end;
+    }
+    if (!strcasecmp(rule, "US"))
+    {
+        // Second Sunday March, 02:00 standard; first Sunday November, 02:00 daylight.
+        s64 start = UtcTransition(year, 3, SundayOfMonth(year, 3, 2), 2, standardOffset);
+        s64 end = UtcTransition(year, 11, SundayOfMonth(year, 11, 1), 2, standardOffset + dstOffset);
+        return utcSeconds >= start && utcSeconds < end;
+    }
+    if (!strcasecmp(rule, "AU"))
+    {
+        // Eastern/southern AU: first Sunday October 02:00 standard,
+        // first Sunday April 03:00 daylight. Season spans New Year.
+        s64 end = UtcTransition(year, 4, SundayOfMonth(year, 4, 1), 3, standardOffset + dstOffset);
+        s64 start = UtcTransition(year, 10, SundayOfMonth(year, 10, 1), 2, standardOffset);
+        return utcSeconds < end || utcSeconds >= start;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
-bool NtpClient_FetchAndSetTimeOverFrames(PiCMDHD& piCMDHD, const NetFrameIO& io, const u8 ourMac[6], const char* serverIPText, s32 utcOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime)
+bool NtpClient_FetchAndSetTimeOverFrames(PiCMDHD& piCMDHD, const NetFrameIO& io, const u8 ourMac[6], const char* serverIPText, s32 utcOffsetMinutes, const char* dstRule, s32 dstOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime)
 {
 	s_lastStage = "START";
 	if (!io.send || !io.receive || !ourMac) { s_lastStage = "FRAME IO FAIL"; return false; }
@@ -614,7 +675,10 @@ bool NtpClient_FetchAndSetTimeOverFrames(PiCMDHD& piCMDHD, const NetFrameIO& io,
 		return false;
 	}
 
-	s64 localSeconds = (s64)unixSeconds + (s64)utcOffsetMinutes * 60;
+	s32 effectiveOffset = utcOffsetMinutes;
+	if (IsDST((s64)unixSeconds, dstRule, utcOffsetMinutes, dstOffsetMinutes))
+		effectiveOffset += dstOffsetMinutes;
+	s64 localSeconds = (s64)unixSeconds + (s64)effectiveOffset * 60;
 	if (localSeconds < 0)
 		localSeconds = 0;
 
@@ -652,9 +716,9 @@ static bool WiredReceive(u8* frame, u32 capacity, u32* length)
 	if (!length || !USPiReceiveFrame(frame, length)) return false;
 	return *length <= capacity;
 }
-bool NtpClient_FetchAndSetTime(PiCMDHD& piCMDHD, const char* serverIPText, s32 utcOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime)
+bool NtpClient_FetchAndSetTime(PiCMDHD& piCMDHD, const char* serverIPText, s32 utcOffsetMinutes, const char* dstRule, s32 dstOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime)
 {
 	if (!USPiEthernetAvailable()) { DEBUG_LOG("NTP: no Ethernet link\r\n"); return false; }
 	u8 mac[6]; USPiGetMACAddress(mac); NetFrameIO io = { WiredSend, WiredReceive };
-	return NtpClient_FetchAndSetTimeOverFrames(piCMDHD, io, mac, serverIPText, utcOffsetMinutes, timeoutMs, outDateTime);
+	return NtpClient_FetchAndSetTimeOverFrames(piCMDHD, io, mac, serverIPText, utcOffsetMinutes, dstRule, dstOffsetMinutes, timeoutMs, outDateTime);
 }

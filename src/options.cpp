@@ -187,6 +187,7 @@ Options::Options(void)
 	, CMDHDButtonReset(4)
 	, CMDHDButtonExit(5)
 	, UTCOffsetMinutes(0)
+	, DSTOffset(60)
 	, wifiSdioTest(0)
 	, wifiEnabled(0)
 {
@@ -195,6 +196,7 @@ Options::Options(void)
 	strcpy(LcdLogoName, "cmd");
 	ROMNameCMDHD[0] = 0;
 	NTPServer[0] = 0;
+	strcpy(DSTRule, "OFF");
 	wifiSSID[0] = wifiPassword[0] = wifiCountry[0] = 0;
 	// GetLCDName is called whether or not options.txt sets LCDName, and it was
 	// left uninitialised - so with no LCDName line it returned a pointer into
@@ -342,6 +344,17 @@ void Options::Process(char* buffer)
 		else if (strcasecmp(pOption, "UTCOffsetMinutes") == 0)
 		{
 			UTCOffsetMinutes = (int)strtol(pValue, NULL, 0);
+		}
+		else if (strcasecmp(pOption, "DSTOffset") == 0)
+		{
+			long value = strtol(pValue, NULL, 0);
+			if (value >= 0 && value <= 180) DSTOffset = (int)value;
+		}
+		else if (strcasecmp(pOption, "DSTRule") == 0)
+		{
+			if (!strcasecmp(pValue, "OFF") || !strcasecmp(pValue, "EU") ||
+			    !strcasecmp(pValue, "US") || !strcasecmp(pValue, "AU"))
+				CopyOption(DSTRule, sizeof(DSTRule), pValue);
 		}
 		ELSE_CHECK_DECIMAL_OPTION(wifiSdioTest)
 		ELSE_CHECK_DECIMAL_OPTION(wifiEnabled)

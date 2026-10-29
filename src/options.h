@@ -63,6 +63,8 @@ public:
 	// means the feature is off, same convention as AutoMountImage.
 	inline const char* GetNTPServer() const { return NTPServer; }
 	inline int GetUTCOffsetMinutes() const { return UTCOffsetMinutes; }
+	inline int GetDSTOffset() const { return DSTOffset; }
+	inline const char* GetDSTRule() const { return DSTRule; }
 	// Raw BCM43430 SDIO identification test. Kept separate from the eventual
 	// WiFi/NTP feature so board routing can be diagnosed safely first.
 	inline unsigned int GetWiFiSdioTest() const { return wifiSdioTest; }
@@ -205,6 +207,8 @@ private:
 
 	char NTPServer[64];
 	int UTCOffsetMinutes;
+	int DSTOffset;
+	char DSTRule[8];
 	unsigned int wifiSdioTest;
 	unsigned int wifiEnabled;
 	char wifiSSID[64], wifiPassword[64], wifiCountry[4];

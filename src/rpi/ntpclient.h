@@ -38,10 +38,12 @@ struct NtpDateTime
 void NtpClient_SetDebug(bool enabled);
 const char* NtpClient_LastStage();
 
-// serverIPText must be a dotted IPv4 address. utcOffsetMinutes is added to UTC.
+// serverIPText must be a dotted IPv4 address. utcOffsetMinutes is standard UTC offset.
+// dstRule: OFF/EU/US/AU; dstOffsetMinutes is applied only during DST.
+// AU uses the eastern/southern Australian October-April convention.
 // Returns true after setting the RTC.
-bool NtpClient_FetchAndSetTime(PiCMDHD& piCMDHD, const char* serverIPText, s32 utcOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime = 0);
+bool NtpClient_FetchAndSetTime(PiCMDHD& piCMDHD, const char* serverIPText, s32 utcOffsetMinutes, const char* dstRule, s32 dstOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime = 0);
 // Runs the same client over the supplied raw Ethernet-frame transport.
-bool NtpClient_FetchAndSetTimeOverFrames(PiCMDHD& piCMDHD, const NetFrameIO& io, const u8 mac[6], const char* serverIPText, s32 utcOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime = 0);
+bool NtpClient_FetchAndSetTimeOverFrames(PiCMDHD& piCMDHD, const NetFrameIO& io, const u8 mac[6], const char* serverIPText, s32 utcOffsetMinutes, const char* dstRule, s32 dstOffsetMinutes, u32 timeoutMs, NtpDateTime* outDateTime = 0);
 
 #endif
